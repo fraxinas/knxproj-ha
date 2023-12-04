@@ -3,31 +3,18 @@
 Utility tool to convert a KNX project into a Home Assistant configuration. It
 depends on [xknxproject] for parsing of the actual ETS project.
 
+
 ## Concept
 
-The configuration in ETS can be placed in the "comment" section for a group address.
+Unlike the original version of [mueli/knxproj-ha], this does not rely on any arbitrary
+comments for the group addresses.
 
-~~~
-```hassos
-<entity_type>:
-  <params>
-```
-~~~
 
-### Light
+## Usage
+### knxproj-print
+`./knxproj-print.py -i filename.knxproj`
+This will parse and print all the group addresses from the given knxproj file
 
-To connect a [ha-knx-light](Light) device type with a group address use the
-following comment:
-
-~~~
-```hassos
-light:
-  name: <name>
-```
-~~~
-
-The `address` and `state_address` parameter are automatically set to be the GA
-address to which the comment belongs too.
 
 [xknxproject]: https://github.com/XKNX/xknxproject
-[ha-knx-light]: https://www.home-assistant.io/integrations/knx/#light
+[ha-knx]: https://www.home-assistant.io/integrations/knx/
