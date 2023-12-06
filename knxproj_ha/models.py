@@ -9,8 +9,10 @@ class Light(Entity):
     """Light configuration"""
     _type_id: str = "light"
     name: str
-    address: str
-    state_address: str
+    address: str = ""
+    state_address: str = ""
+    brightness_address: str = ""
+    brightness_state_address: str = ""
 
 
 class HAConfig(BaseModel):
