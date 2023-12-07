@@ -53,21 +53,24 @@ def _ordered_dump(data, stream=None, Dumper=OrderedDumper, **kwds):
     """Dump YAML with OrderedDict."""
     class OrderedDumper(Dumper):
         pass
+
     def _dict_representer(dumper, data):
         return dumper.represent_mapping(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, data.items())
+
     OrderedDumper.add_representer(dict, _dict_representer)
     return yaml.dump(data, stream, OrderedDumper, **kwds)
 
 def write(ha_config: HAConfig, dp: Path) -> None:
     """Serialize the given Home Assistant config into YAML format."""
-    filtered_config = []
+    filtered_config = {'knx': {'light': []}}
     for light in ha_config.light:
         light_dict = light.dict()
         # Reorder dict to have 'name' first and exclude empty addresses
         ordered_light = {'name': light_dict.pop('name')}
         for key, value in light_dict.items():
-            if value != '':
+            if value:
                 ordered_light[key] = value
-        filtered_config.append(ordered_light)
+        filtered_config['knx']['light'].append(ordered_light)
 
-    print(_ordered_dump(filtered_config, indent=2, allow_unicode=True))
+    yaml_str = _ordered_dump(filtered_config, indent=2, allow_unicode=True)
+    print(yaml_str)
