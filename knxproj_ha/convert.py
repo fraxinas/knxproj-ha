@@ -3,7 +3,7 @@ from pathlib import Path
 import io
 from xknxproject.models import KNXProject
 from xknxproject import XKNXProj
-from .models import HAConfig, Light
+from .models import HAConfig, BinarySensor, Sensor, Light
 import yaml
 
 logger = logging.getLogger("knxproj_ha")
@@ -13,7 +13,7 @@ def _get_lights_ga(group_addresses):
     for ga, values in group_addresses.items():
         base_name = values['name'].replace(' Helligkeit', '')
 
-        if ga.startswith(('5/0/', '5/1/', '5/2/')) and values['dpt'] and values['dpt']['main'] == 1:
+        if ga.startswith(('5/0/', '5/1/', '5/2/')) and values['dpt'] and values['dpt']['main'] >= 2:
             lights.setdefault(base_name, Light(name=base_name)).address = ga
         elif '5/3/' in ga and values['dpt'] is None:
             lights.setdefault(base_name, Light(name=base_name)).brightness_address = ga
@@ -24,6 +24,15 @@ def _get_lights_ga(group_addresses):
 
     return list(lights.values())
 
+def _get_binary_sensors_ga(group_addresses, existing_lights = []):
+    binary_sensors = []
+    used_addresses = {light.state_address for light in existing_lights}
+
+    for ga, values in group_addresses.items():
+        if (values['dpt'] and values['dpt']['main'] == 1 and values['dpt']['sub'] in (2,3,4,5,6,11,12,13,14,18)
+                and ga not in used_addresses):
+            binary_sensors.append(BinarySensor(name=values["name"], state_address=ga))
+    return binary_sensors
 
 def convert(fp: Path, language: str = "de-DE") -> HAConfig:
     knxproj: XKNXProj = XKNXProj(
@@ -43,7 +52,9 @@ def convert(fp: Path, language: str = "de-DE") -> HAConfig:
         logger.debug(project["group_addresses"][ga])
 
     lights = _get_lights_ga(project["group_addresses"])
-    ha_config = HAConfig(light=lights)
+    binary_sensors = _get_binary_sensors_ga(project["group_addresses"], lights)
+    print(binary_sensors)
+    ha_config = HAConfig(light=lights, binary_sensors=binary_sensors)
     return ha_config
 
 class OrderedDumper(yaml.SafeDumper):
@@ -60,17 +71,22 @@ def _ordered_dump(data, stream=None, Dumper=OrderedDumper, **kwds):
     OrderedDumper.add_representer(dict, _dict_representer)
     return yaml.dump(data, stream, OrderedDumper, **kwds)
 
+
 def write(ha_config: HAConfig, dp: Path) -> None:
     """Serialize the given Home Assistant config into YAML format."""
-    filtered_config = {'knx': {'light': []}}
-    for light in ha_config.light:
-        light_dict = light.dict()
-        # Reorder dict to have 'name' first and exclude empty addresses
-        ordered_light = {'name': light_dict.pop('name')}
-        for key, value in light_dict.items():
-            if value:
-                ordered_light[key] = value
-        filtered_config['knx']['light'].append(ordered_light)
+    ha_config_dict = ha_config.dict()
+    filtered_config = {'knx': {}}
+
+    for entity_type, entities in ha_config_dict.items():
+        filtered_config['knx'][entity_type] = []
+        for entity in entities:
+            # Check if 'name' exists in the entity dictionary and reorder
+            if 'name' in entity:
+                ordered_entity = {'name': entity.pop('name')}
+                for key, value in entity.items():
+                    if value:
+                        ordered_entity[key] = value
+                filtered_config['knx'][entity_type].append(ordered_entity)
 
     yaml_str = _ordered_dump(filtered_config, indent=2, allow_unicode=True)
     print(yaml_str)
