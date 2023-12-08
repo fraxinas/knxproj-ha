@@ -15,7 +15,7 @@ class Light(Entity):
 
 
 class BinarySensor(Entity):
-    """Sensor configuration for Home Assistant KNX integration."""
+    """BinarySensor configuration"""
     _type_id: str = "binary_sensor"
 
     state_address: str
@@ -24,7 +24,7 @@ class BinarySensor(Entity):
 
 
 class Sensor(Entity):
-    """Sensor configuration for Home Assistant KNX integration."""
+    """Sensor configuration"""
     _type_id: str = "sensor"
 
     state_address: str
@@ -33,9 +33,18 @@ class Sensor(Entity):
     device_class: str | None = None
 
 
+class Climate(Entity):
+    """Climate configuration"""
+    _type_id: str = "climate"
+    temperature_address: str
+    target_temperature_address: str
+    operation_mode_address: str
+    on_off_state_address: str
+
+
 class HAConfig(BaseModel):
     """Extracted Home Assistant configuration"""
 
     light: list[Light] = list()
     binary_sensors: list[BinarySensor] = list()
-
+    climate: list[Climate] = list()

@@ -3,10 +3,16 @@ from pathlib import Path
 import io
 from xknxproject.models import KNXProject
 from xknxproject import XKNXProj
-from .models import HAConfig, BinarySensor, Sensor, Light
+from .models import HAConfig, BinarySensor, Sensor, Light, Climate
 import yaml
 
 logger = logging.getLogger("knxproj_ha")
+
+TARGET_TEMPERATURE_GROUPNAME = "Soll-Temperaturen"
+OPERATION_MODE_GROUPNAME = "Betriebsmodi"
+ON_OFF_STATE_GROUPNAME = "Meldung Heizen"
+CURRENT_TEMPERATURE_GROUPNAME = "Ist-Temperaturen"
+
 
 def _get_lights_ga(group_addresses):
     lights = {}
@@ -23,6 +29,43 @@ def _get_lights_ga(group_addresses):
             lights.setdefault(base_name, Light(name=base_name)).state_address = ga
 
     return list(lights.values())
+
+def _find_group_range_by_name(group_ranges, name):
+    for main_range, main_range_data in group_ranges.items():
+        for sub_range, sub_range_data in main_range_data.get('group_ranges', {}).items():
+            if sub_range_data.get('name') == name:
+                return sub_range_data.get('group_addresses', [])
+    logger.warning(f"No group addresses found for group name '{name}'")
+    return []
+
+def _get_climate_ga(project):
+    climates = {}
+
+    def process_climate_group(name, dpt_main, dpt_sub, field_name, warning_msg):
+        sub_group_addresses = _find_group_range_by_name(project["group_ranges"], name)
+        all_group_addresses = project["group_addresses"]
+        for address in sub_group_addresses:
+            ga = all_group_addresses.get(address)
+            if ga and ga['dpt'] == {'main': dpt_main, 'sub': dpt_sub}:
+                base_name = ga['name']
+                climates.setdefault(base_name, Climate(
+                    name=base_name,
+                    temperature_address='',
+                    target_temperature_address='',
+                    operation_mode_address='',
+                    on_off_state_address='')
+                ).__setattr__(field_name, ga['address'])
+            else:
+                logger.warning(warning_msg.format(ga))
+
+    # Process different climate-related group addresses
+    process_climate_group(TARGET_TEMPERATURE_GROUPNAME, 9, 1, 'target_temperature_address', "Unexpected DPT for target temperature in GA: {}")
+    process_climate_group(OPERATION_MODE_GROUPNAME, 20, 102, 'operation_mode_address', "Unexpected DPT for operation mode in GA: {}")
+    process_climate_group(ON_OFF_STATE_GROUPNAME, 1, 2, 'on_off_state_address', "Unexpected DPT for on/off state in GA: {}")
+    process_climate_group(CURRENT_TEMPERATURE_GROUPNAME, 9, 1, 'temperature_address', "Unexpected DPT for current temperature in GA: {}")
+
+    return list(climates.values())
+
 
 def _get_binary_sensors_ga(group_addresses, existing_lights = []):
     binary_sensors = []
@@ -52,9 +95,9 @@ def convert(fp: Path, language: str = "de-DE") -> HAConfig:
         logger.debug(project["group_addresses"][ga])
 
     lights = _get_lights_ga(project["group_addresses"])
+    climate = _get_climate_ga(project)
     binary_sensors = _get_binary_sensors_ga(project["group_addresses"], lights)
-    print(binary_sensors)
-    ha_config = HAConfig(light=lights, binary_sensors=binary_sensors)
+    ha_config = HAConfig(light=lights, binary_sensors=binary_sensors, climate=climate)
     return ha_config
 
 class OrderedDumper(yaml.SafeDumper):
