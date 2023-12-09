@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import logging
 import argparse
-from knxproj_ha.convert import convert, write
+from knxproj_ha.convert import KNXHAConverter
 
 logger = logging.getLogger("convert")
 
@@ -15,11 +15,9 @@ def main():
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
 
-    ha_config = convert(args.input)
-
-    logger.debug(ha_config)
-    write(ha_config, "")
-
+    converter = KNXHAConverter(project_file_path=args.input)
+    ha_config = converter.convert()
+    converter.print(ha_config)
 
 if __name__ == "__main__":
     main()
