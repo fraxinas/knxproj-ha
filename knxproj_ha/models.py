@@ -58,5 +58,6 @@ class HAConfig(BaseModel):
 
     light: list[Light] = list()
     binary_sensor: list[BinarySensor] = list()
+    sensor: list[Sensor] = list()
     climate: list[Climate] = list()
     cover: list[Cover] = list()

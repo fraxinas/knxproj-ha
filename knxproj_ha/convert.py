@@ -59,6 +59,174 @@ class KNXHAConverter:
         return []
 
 
+    def _map_dpt_to_ha_sensor(self, dpt):
+        """
+        Map a KNX DPT (Data Point Type) to its corresponding Home Assistant sensor type and device class.
+
+        Args:
+            dpt_main (dict): DPT with main and sub.
+
+        Returns:
+            tuple: (value_type, device_class) or None if no match is found.
+        """
+
+        # Mapping of DPT main and sub to sensor types and device classes
+        sensor_mappings = {
+            # Format: (DPT main, DPT sub): ('value_type', 'device_class'),
+            (5, 1): ('percent', 'humidity'),
+            (5, 3): ('angle', 'None'),
+            (5, 4): ('percentU8', 'humidity'),
+            (5, 5): ('decimal_factor', 'None'),
+            (6, 1): ('percentV8', 'None'),
+            (6, 10): ('counter_pulses', 'None'),
+            (7, 1): ('pulse_2byte', 'None'),
+            (7, 2): ('time_period_msec', 'duration'),
+            (7, 3): ('time_period_10msec', 'duration'),
+            (7, 4): ('time_period_100msec', 'duration'),
+            (7, 5): ('time_period_sec', 'duration'),
+            (7, 6): ('time_period_min', 'duration'),
+            (7, 7): ('time_period_hrs', 'duration'),
+            (7, 11): ('length_mm', 'distance'),
+            (7, 12): ('current', 'current'),
+            (7, 13): ('brightness', 'illuminance'),
+            (7, 600): ('color_temperature', 'None'),
+            (8, 1): ('pulse_2byte_signed', 'None'),
+            (8, 2): ('delta_time_ms', 'duration'),
+            (8, 3): ('delta_time_10ms', 'duration'),
+            (8, 4): ('delta_time_100ms', 'duration'),
+            (8, 5): ('delta_time_sec', 'duration'),
+            (8, 6): ('delta_time_min', 'duration'),
+            (8, 7): ('delta_time_hrs', 'duration'),
+            (8, 10): ('percentV16', 'None'),
+            (8, 11): ('rotation_angle', 'angle'),
+            (9, 1): ('temperature', 'temperature'),
+            (9, 2): ('temperature_difference_2byte', 'temperature'),
+            (9, 3): ('temperature_a', 'temperature'),
+            (9, 4): ('illuminance', 'illuminance'),
+            (9, 5): ('wind_speed_ms', 'speed'),
+            (9, 6): ('pressure_2byte', 'pressure'),
+            (9, 7): ('humidity', 'humidity'),
+            (9, 8): ('ppm', 'None'),
+            (9, 9): ('air_flow', 'speed'),
+            (9, 10): ('time_1', 'duration'),
+            (9, 11): ('time_2', 'duration'),
+            (9, 20): ('voltage', 'voltage'),
+            (9, 21): ('current', 'current'),
+            (9, 22): ('power_density', 'power'),
+            (9, 23): ('kelvin_per_percent', 'temperature'),
+            (9, 24): ('power_2byte', 'power'),
+            (9, 25): ('volume_flow', 'volume'),
+            (9, 26): ('rain_amount', 'precipitation'),
+            (9, 27): ('temperature_f', 'temperature'),
+            (9, 28): ('wind_speed_kmh', 'speed'),
+            (9, 29): ('absolute_humidity', 'humidity'),
+            (9, 30): ('concentration_ugm3', 'None'),
+            (12, 1): ('pulse_4_ucount', 'None'),
+            (12, 100): ('long_time_period_sec', 'duration'),
+            (12, 101): ('long_time_period_min', 'duration'),
+            (12, 102): ('long_time_period_hrs', 'duration'),
+            (12, 1200): ('volume_liquid_litre', 'volume'),
+            (12, 1201): ('volume_m3', 'volume'),
+            (13, 1): ('pulse_4byte', 'None'),
+            (13, 2): ('flow_rate_m3h', 'None'),
+            (13, 10): ('active_energy', 'energy'),
+            (13, 11): ('apparant_energy', 'energy'),
+            (13, 12): ('reactive_energy', 'energy'),
+            (13, 13): ('active_energy_kwh', 'energy'),
+            (13, 14): ('apparant_energy_kvah', 'energy'),
+            (13, 15): ('reactive_energy_kvarh', 'energy'),
+            (13, 16): ('active_energy_mwh', 'energy'),
+            (13, 100): ('long_delta_timesec', 'duration'),
+            (14, 0): ('acceleration', 'None'),
+            (14, 1): ('acceleration_angular', 'None'),
+            (14, 2): ('activation_energy', 'None'),
+            (14, 3): ('activity', 'None'),
+            (14, 4): ('mol', 'None'),
+            (14, 5): ('amplitude', 'None'),
+            (14, 6): ('angle_rad', 'None'),
+            (14, 7): ('angle_deg', 'None'),
+            (14, 8): ('angular_momentum', 'None'),
+            (14, 9): ('angular_velocity', 'None'),
+            (14, 10): ('area', 'None'),
+            (14, 11): ('capacitance', 'None'),
+            (14, 12): ('charge_density_surface', 'None'),
+            (14, 13): ('charge_density_volume', 'None'),
+            (14, 14): ('compressibility', 'None'),
+            (14, 15): ('conductance', 'None'),
+            (14, 16): ('electrical_conductivity', 'None'),
+            (14, 17): ('density', 'None'),
+            (14, 18): ('electric_charge', 'None'),
+            (14, 19): ('electric_current', 'current'),
+            (14, 20): ('electric_current_density', 'None'),
+            (14, 21): ('electric_dipole_moment', 'None'),
+            (14, 22): ('electric_displacement', 'None'),
+            (14, 23): ('electric_field_strength', 'None'),
+            (14, 24): ('electric_flux', 'None'),
+            (14, 25): ('electric_flux_density', 'None'),
+            (14, 26): ('electric_polarization', 'None'),
+            (14, 27): ('electric_potential', 'voltage'),
+            (14, 28): ('electric_potential_difference', 'voltage'),
+            (14, 29): ('electromagnetic_moment', 'None'),
+            (14, 30): ('electromotive_force', 'None'),
+            (14, 31): ('energy', 'energy'),
+            (14, 32): ('force', 'None'),
+            (14, 33): ('frequency', 'frequency'),
+            (14, 34): ('angular_frequency', 'frequency'),
+            (14, 35): ('heatcapacity', 'None'),
+            (14, 36): ('heatflowrate', 'None'),
+            (14, 37): ('heat_quantity', 'None'),
+            (14, 38): ('impedance', 'None'),
+            (14, 39): ('length', 'None'),
+            (14, 40): ('light_quantity', 'None'),
+            (14, 41): ('luminance', 'None'),
+            (14, 42): ('luminous_flux', 'None'),
+            (14, 43): ('luminous_intensity', 'None'),
+            (14, 44): ('magnetic_field_strength', 'None'),
+            (14, 45): ('magnetic_flux', 'None'),
+            (14, 46): ('magnetic_flux_density', 'None'),
+            (14, 47): ('magnetic_moment', 'None'),
+            (14, 48): ('magnetic_polarization', 'None'),
+            (14, 49): ('magnetization', 'None'),
+            (14, 50): ('magnetomotive_force', 'None'),
+            (14, 51): ('mass', 'weight'),
+            (14, 52): ('mass_flux', 'None'),
+            (14, 53): ('momentum', 'None'),
+            (14, 54): ('phaseanglerad', 'None'),
+            (14, 55): ('phaseangledeg', 'None'),
+            (14, 56): ('power', 'power'),
+            (14, 57): ('powerfactor', 'power_factor'),
+            (14, 58): ('pressure', 'pressure'),
+            (14, 59): ('reactance', 'None'),
+            (14, 60): ('resistance', 'None'),
+            (14, 61): ('resistivity', 'None'),
+            (14, 62): ('self_inductance', 'None'),
+            (14, 63): ('solid_angle', 'None'),
+            (14, 63): ('solid_angle', 'None'),
+            (14, 64): ('sound_intensity', 'None'),
+            (14, 65): ('speed', 'speed'),
+            (14, 66): ('stress', 'pressure'),
+            (14, 67): ('surface_tension', 'None'),
+            (14, 68): ('common_temperature', 'temperature'),
+            (14, 69): ('absolute_temperature', 'temperature'),
+            (14, 70): ('temperature_difference', 'temperature'),
+            (14, 71): ('thermal_capacity', 'None'),
+            (14, 72): ('thermal_conductivity', 'None'),
+            (14, 73): ('thermoelectric_power', 'None'),
+            (14, 74): ('time_seconds', 'duration'),
+            (14, 75): ('torque', 'None'),
+            (14, 76): ('volume', 'volume'),
+            (14, 77): ('volume_flux', 'None'),
+            (14, 78): ('weight', 'None'),
+            (14, 79): ('work', 'None'),
+            (14, 80): ('apparent_power', 'apparent_power'),
+            (16, 0): ('string', 'None'),
+            (16, 1): ('latin_1', 'None'),
+            (17, 1): ('scene_number', 'None'),
+        }
+
+        return sensor_mappings.get((dpt["main"], dpt["sub"]))
+
+
     def _get_lights_ga(self, group_addresses):
         lights = {}
         for ga, values in group_addresses.items():
@@ -69,8 +237,10 @@ class KNXHAConverter:
                 self.processed_addresses.add(ga)
             elif '5/3/' in ga and values['dpt'] and _check_dpt(values, 5, 1):
                 lights.setdefault(base_name, Light(name=base_name)).brightness_address = ga
+                self.processed_addresses.add(ga)
             elif '5/5/' in ga and values['name'].endswith('Helligkeit') and _check_dpt(values, 5, 1):
                 lights.setdefault(base_name, Light(name=base_name)).brightness_state_address = ga
+                self.processed_addresses.add(ga)
             elif '5/5/' in ga and _check_dpt(values, 5, 11):
                 lights.setdefault(base_name, Light(name=base_name)).state_address = ga
                 self.processed_addresses.add(ga)
@@ -151,6 +321,17 @@ class KNXHAConverter:
         return binary_sensors
 
 
+    def _get_sensors_ga(self, group_addresses):
+        sensors = []
+
+        for ga, values in group_addresses.items():
+            if ga not in self.processed_addresses and values['dpt']:
+                mapping = self._map_dpt_to_ha_sensor(values['dpt'])
+                if mapping:
+                    (value_type, device_class) = mapping
+                    sensors.append(Sensor(name=values["name"], state_address=ga, type=value_type, device_class=device_class))
+        return sensors
+
 
     def convert(self):
         knxproj: XKNXProj = XKNXProj(
@@ -165,8 +346,9 @@ class KNXHAConverter:
         lights = self._get_lights_ga(project["group_addresses"])
         climate = self._get_climate_ga(project)
         binary_sensors = self._get_binary_sensors_ga(project["group_addresses"])
+        sensors = self._get_sensors_ga(project["group_addresses"])
 
-        return HAConfig(light=lights, binary_sensor=binary_sensors, climate=climate, cover=covers)
+        return HAConfig(light=lights, binary_sensor=binary_sensors, sensor=sensors, climate=climate, cover=covers)
 
 
     def print(self, ha_config):
