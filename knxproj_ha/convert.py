@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from xknxproject.models import KNXProject
 from xknxproject import XKNXProj
-from .models import HAConfig, BinarySensor, Sensor, Light, Climate, BaseModel
+from .models import HAConfig, BinarySensor, Sensor, Light, Climate, Cover, BaseModel
 import yaml
 
 class OrderedDumper(yaml.SafeDumper):
@@ -40,6 +40,7 @@ class KNXHAConverter:
                     return sub_range_data.get('group_addresses', [])
         self.logger.warning(f"No group addresses found for group name '{name}'")
         return []
+
 
     def _get_lights_ga(self, group_addresses):
         lights = {}
@@ -90,6 +91,38 @@ class KNXHAConverter:
         return list(climates.values())
 
 
+    def _remove_bracketed_substring(self, string):
+        start = string.find('(')
+        if start != -1:
+            end = string.find(')', start)
+            if end != -1:
+                return string[:start].strip() + string[end+1:].strip()
+        return string
+
+
+    def _get_cover_ga(self, group_addresses):
+        covers = {}
+        # First, find group addresses with DPT 1.008
+        for ga, values in group_addresses.items():
+            base_name = values['name'].split(' (')[0]
+            if _check_dpt(values, 1, 8):
+                covers[base_name] = Cover(name=base_name, move_long_address=ga)
+                self.processed_addresses.add(ga)
+
+        # Next, find group addresses with DPT 1.007 or 5.001 with the same base name
+        for ga, values in group_addresses.items():
+            base_name = values['name'].split(' (')[0]
+            if base_name in covers:
+                if _check_dpt(values, 1, 7):
+                    covers[base_name].stop_address = ga
+                    self.processed_addresses.add(ga)
+                elif _check_dpt(values, 5, 1):
+                    covers[base_name].position_address = ga
+                    self.processed_addresses.add(ga)
+
+        return list(covers.values())
+
+
     def _get_binary_sensors_ga(self, group_addresses):
         binary_sensors = []
 
@@ -107,11 +140,12 @@ class KNXHAConverter:
         project = knxproj.parse()
         self.logger.debug("... parsing finished")
 
+        covers = self._get_cover_ga(project["group_addresses"])
         lights = self._get_lights_ga(project["group_addresses"])
         climate = self._get_climate_ga(project)
         binary_sensors = self._get_binary_sensors_ga(project["group_addresses"])
 
-        return HAConfig(light=lights, binary_sensors=binary_sensors, climate=climate)
+        return HAConfig(light=lights, binary_sensor=binary_sensors, climate=climate, cover=covers)
 
 
     def print(self, ha_config):

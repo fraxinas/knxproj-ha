@@ -42,9 +42,21 @@ class Climate(Entity):
     on_off_state_address: str
 
 
+class Cover(Entity):
+    """Cover configuration, this is for window blinds/shutters/jalousies"""
+    _type_id: str = "cover"
+    move_long_address: str = ""
+    stop_address: str = ""
+    position_address: str = ""
+    on_off_state_address: str = ""
+    position_address: str = ""
+    position_state_address: str = ""
+
+
 class HAConfig(BaseModel):
     """Extracted Home Assistant configuration"""
 
     light: list[Light] = list()
-    binary_sensors: list[BinarySensor] = list()
+    binary_sensor: list[BinarySensor] = list()
     climate: list[Climate] = list()
+    cover: list[Cover] = list()
