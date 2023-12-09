@@ -18,7 +18,24 @@ def _ordered_dump(data, stream=None, Dumper=OrderedDumper, **kwds):
     return yaml.dump(data, stream, OrderedDumper, **kwds)
 
 def _check_dpt(values, dpt_main, dpt_sub = None):
-    return values['dpt'] and values['dpt']['main'] == dpt_main and values['dpt']['sub'] == dpt_sub
+    if not (values and values['dpt']):
+        return False
+
+    # Check if dpt_main matches
+    if not values['dpt']['main'] == dpt_main:
+        return False
+
+    # If dpt_sub is None, no further check is required
+    if dpt_sub is None:
+        return True
+
+    # If dpt_sub is a lambda function, call it
+    if callable(dpt_sub):
+        return dpt_sub(values['dpt']['sub'])
+
+    # Otherwise, check if dpt_sub matches
+    return values['dpt']['sub'] == dpt_sub
+
 
 class KNXHAConverter:
     TARGET_TEMPERATURE_GROUPNAME = "Soll-Temperaturen"
@@ -126,10 +143,14 @@ class KNXHAConverter:
     def _get_binary_sensors_ga(self, group_addresses):
         binary_sensors = []
 
+        check_dpt_subs = lambda dpt_sub: dpt_sub in (2, 3, 4, 5, 6, 11, 12, 13, 14, 18)
+
         for ga, values in group_addresses.items():
-            if ga not in self.processed_addresses and (values['dpt'] and values['dpt']['main'] == 1 and values['dpt']['sub'] in (2,3,4,5,6,11,12,13,14,18)):
+            if ga not in self.processed_addresses and _check_dpt(values, 1, check_dpt_subs):
                 binary_sensors.append(BinarySensor(name=values["name"], state_address=ga))
         return binary_sensors
+
+
 
     def convert(self):
         knxproj: XKNXProj = XKNXProj(
