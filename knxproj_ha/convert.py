@@ -241,7 +241,7 @@ class KNXHAConverter:
             elif '5/5/' in ga and values['name'].endswith('Helligkeit') and _check_dpt(values, 5, 1):
                 lights.setdefault(base_name, Light(name=base_name)).brightness_state_address = ga
                 self.processed_addresses.add(ga)
-            elif '5/5/' in ga and _check_dpt(values, 5, 11):
+            elif '5/5/' in ga and _check_dpt(values, 1, 11):
                 lights.setdefault(base_name, Light(name=base_name)).state_address = ga
                 self.processed_addresses.add(ga)
 
