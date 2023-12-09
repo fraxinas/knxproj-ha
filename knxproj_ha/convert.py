@@ -42,21 +42,69 @@ class KNXHAConverter:
     OPERATION_MODE_GROUPNAME = "Betriebsmodi"
     ON_OFF_STATE_GROUPNAME = "Meldung Heizen"
     CURRENT_TEMPERATURE_GROUPNAME = "Ist-Temperaturen"
+    LIGHTS_GROUPNAME = "Beleuchtung"
+    LIGHTS_STATUS_GROUPNAME = "Status"
 
     def __init__(self, project_file_path, language='de-DE'):
         self.project_file_path = project_file_path
         self.language = language
         self.processed_addresses = set()
         self.logger = logging.getLogger("knxproj_ha")
+        self.project = None
+        self.group_range_cache = {}
 
 
-    def _find_group_range_by_name(self, group_ranges, name):
+    def _find_group_range_by_name(self, name):
+        # Check cache first
+        if name in self.group_range_cache:
+            return self.group_range_cache[name]
+
+        group_ranges = self.project["group_ranges"]
+        all_group_addresses = []
+
         for main_range, main_range_data in group_ranges.items():
+            if main_range_data.get('name') == name:
+                # Found in main range, get addresses from all sub-ranges
+                for sub_range, sub_range_data in main_range_data.get('group_ranges', {}).items():
+                    all_group_addresses.extend(sub_range_data.get('group_addresses', []))
+
+                # Cache and return the concatenated list
+                self.group_range_cache[name] = all_group_addresses
+                return all_group_addresses
+
+            # Check in sub-ranges
             for sub_range, sub_range_data in main_range_data.get('group_ranges', {}).items():
                 if sub_range_data.get('name') == name:
+                    # Found in sub-range, return addresses
+                    self.group_range_cache[name] = sub_range_data.get('group_addresses', [])
                     return sub_range_data.get('group_addresses', [])
+
         self.logger.warning(f"No group addresses found for group name '{name}'")
+        # Cache the empty result
+        self.group_range_cache[name] = []
         return []
+
+
+    def _find_group_range_path(self, ga_values):
+        address = ga_values["address"]
+        ga_name = ga_values["name"]
+        group_ranges = self.project["group_ranges"]
+
+        for main_range, main_range_data in group_ranges.items():
+            main_range_name = main_range_data.get('name')
+
+            # Check in the main range's direct group addresses
+            if address in main_range_data.get('group_addresses', []):
+                return main_range_name
+
+            # Check in sub-ranges
+            for sub_range, sub_range_data in main_range_data.get('group_ranges', {}).items():
+                if address in sub_range_data.get('group_addresses', []):
+                    sub_range_name = sub_range_data.get('name')
+                    return f"{main_range_name}/{sub_range_name}/{ga_name}"
+
+        self.logger.warning(f"No path found for group addresses {address}")
+        return "Unknown"  # Return a default value if not found
 
 
     def _map_dpt_to_ha_sensor(self, dpt):
@@ -232,28 +280,38 @@ class KNXHAConverter:
         for ga, values in group_addresses.items():
             base_name = values['name'].replace(' Helligkeit', '')
 
-            if ga.startswith(('5/0/', '5/1/', '5/2/')) and _check_dpt(values, 1, 1):
-                lights.setdefault(base_name, Light(name=base_name)).address = ga
-                self.processed_addresses.add(ga)
-            elif '5/3/' in ga and values['dpt'] and _check_dpt(values, 5, 1):
-                lights.setdefault(base_name, Light(name=base_name)).brightness_address = ga
-                self.processed_addresses.add(ga)
-            elif '5/5/' in ga and values['name'].endswith('Helligkeit') and _check_dpt(values, 5, 1):
-                lights.setdefault(base_name, Light(name=base_name)).brightness_state_address = ga
-                self.processed_addresses.add(ga)
-            elif '5/5/' in ga and _check_dpt(values, 1, 11):
-                lights.setdefault(base_name, Light(name=base_name)).state_address = ga
-                self.processed_addresses.add(ga)
+            lights_group_range = self._find_group_range_by_name(self.LIGHTS_GROUPNAME)
+            print("checking", self._find_group_range_path(values))
+
+            if ga in lights_group_range:
+                if _check_dpt(values, 1, 1):
+                    lights.setdefault(base_name, Light(name=base_name)).address = ga
+                    self.processed_addresses.add(ga)
+                elif _check_dpt(values, 1, 11):
+                    lights.setdefault(base_name, Light(name=base_name)).state_address = ga
+                    self.processed_addresses.add(ga)
+                elif _check_dpt(values, 5, 1):
+                    if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(values):
+                        lights.setdefault(base_name, Light(name=base_name)).brightness_state_address = ga
+                    else:
+                        lights.setdefault(base_name, Light(name=base_name)).brightness_address = ga
+                    self.processed_addresses.add(ga)
+                elif _check_dpt(values, 7, 600):
+                    if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(values):
+                        lights.setdefault(base_name, Light(name=base_name)).color_temperature_state_address = ga
+                    else:
+                        lights.setdefault(base_name, Light(name=base_name)).color_temperature_address = ga
+                    self.processed_addresses.add(ga)
 
         return list(lights.values())
 
 
-    def _get_climate_ga(self, project):
+    def _get_climate_ga(self, all_group_addresses):
         climates = {}
 
         def process_climate_group(name, dpt_main, dpt_sub, field_name, warning_msg):
-            sub_group_addresses = self._find_group_range_by_name(project["group_ranges"], name)
-            all_group_addresses = project["group_addresses"]
+            sub_group_addresses = self._find_group_range_by_name(name)
+
             for address in sub_group_addresses:
                 values = all_group_addresses.get(address)
                 if values and values['dpt'] == {'main': dpt_main, 'sub': dpt_sub}:
@@ -339,14 +397,14 @@ class KNXHAConverter:
             language="de-DE",  # optional
         )
         self.logger.debug("Start parsing KNX project file ...")
-        project = knxproj.parse()
+        self.project = knxproj.parse()
         self.logger.debug("... parsing finished")
 
-        covers = self._get_cover_ga(project["group_addresses"])
-        lights = self._get_lights_ga(project["group_addresses"])
-        climate = self._get_climate_ga(project)
-        binary_sensors = self._get_binary_sensors_ga(project["group_addresses"])
-        sensors = self._get_sensors_ga(project["group_addresses"])
+        covers = self._get_cover_ga(self.project["group_addresses"])
+        lights = self._get_lights_ga(self.project["group_addresses"])
+        climate = self._get_climate_ga(self.project["group_addresses"])
+        binary_sensors = self._get_binary_sensors_ga(self.project["group_addresses"])
+        sensors = self._get_sensors_ga(self.project["group_addresses"])
 
         return HAConfig(light=lights, binary_sensor=binary_sensors, sensor=sensors, climate=climate, cover=covers)
 

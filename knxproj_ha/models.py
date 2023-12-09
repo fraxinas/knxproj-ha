@@ -12,6 +12,8 @@ class Light(Entity):
     state_address: str = ""
     brightness_address: str = ""
     brightness_state_address: str = ""
+    color_temperature_address: str = ""
+    color_temperature_state_address: str = ""
 
 
 class BinarySensor(Entity):
