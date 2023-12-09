@@ -17,6 +17,9 @@ def _ordered_dump(data, stream=None, Dumper=OrderedDumper, **kwds):
     """Dump YAML with OrderedDict."""
     return yaml.dump(data, stream, OrderedDumper, **kwds)
 
+def _check_dpt(values, dpt_main, dpt_sub = None):
+    return values['dpt'] and values['dpt']['main'] == dpt_main and values['dpt']['sub'] == dpt_sub
+
 class KNXHAConverter:
     TARGET_TEMPERATURE_GROUPNAME = "Soll-Temperaturen"
     OPERATION_MODE_GROUPNAME = "Betriebsmodi"
@@ -38,20 +41,19 @@ class KNXHAConverter:
         self.logger.warning(f"No group addresses found for group name '{name}'")
         return []
 
-
     def _get_lights_ga(self, group_addresses):
         lights = {}
         for ga, values in group_addresses.items():
             base_name = values['name'].replace(' Helligkeit', '')
 
-            if ga.startswith(('5/0/', '5/1/', '5/2/')) and values['dpt'] and values['dpt']['main'] >= 2:
+            if ga.startswith(('5/0/', '5/1/', '5/2/')) and _check_dpt(values, 1, 1):
                 lights.setdefault(base_name, Light(name=base_name)).address = ga
                 self.processed_addresses.add(ga)
-            elif '5/3/' in ga and values['dpt'] is None:
+            elif '5/3/' in ga and values['dpt'] and _check_dpt(values, 5, 1):
                 lights.setdefault(base_name, Light(name=base_name)).brightness_address = ga
-            elif '5/5/' in ga and values['name'].endswith('Helligkeit'):
+            elif '5/5/' in ga and values['name'].endswith('Helligkeit') and _check_dpt(values, 5, 1):
                 lights.setdefault(base_name, Light(name=base_name)).brightness_state_address = ga
-            elif '5/5/' in ga and values['dpt']['main'] == 1:
+            elif '5/5/' in ga and _check_dpt(values, 5, 11):
                 lights.setdefault(base_name, Light(name=base_name)).state_address = ga
                 self.processed_addresses.add(ga)
 
