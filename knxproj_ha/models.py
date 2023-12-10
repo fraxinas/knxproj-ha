@@ -8,12 +8,12 @@ class Entity(BaseModel):
 class Light(Entity):
     """Light configuration"""
     _type_id: str = "light"
-    address: list[str] = [""]
-    state_address: str = ""
-    brightness_address: str = ""
-    brightness_state_address: str = ""
-    color_temperature_address: str = ""
-    color_temperature_state_address: str = ""
+    address: list[str] = []
+    state_address: list[str] = []
+    brightness_address: list[str] = []
+    brightness_state_address: list[str] = []
+    color_temperature_address: list[str] = []
+    color_temperature_state_address: list[str] = []
 
 
 class BinarySensor(Entity):
@@ -43,16 +43,15 @@ class Climate(Entity):
     operation_mode_address: str
     on_off_state_address: str
 
-
 class Cover(Entity):
     """Cover configuration, this is for window blinds/shutters/jalousies"""
     _type_id: str = "cover"
-    move_long_address: str = ""
-    stop_address: str = ""
-    position_address: str = ""
-    on_off_state_address: str = ""
-    position_address: str = ""
-    position_state_address: str = ""
+    move_long_address: list[str] = []
+    stop_address: list[str] = []
+    position_address: list[str] = []
+    on_off_state_address: list[str] = []
+    position_address: list[str] = []
+    position_state_address: list[str] = []
 
 
 class HAConfig(BaseModel):

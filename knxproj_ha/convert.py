@@ -281,7 +281,14 @@ class KNXHAConverter:
             ga_links = co.get("group_address_links")
             if ga_links and len(ga_links) > 1:
                 self.ga_listener_keys[ga_links[0]] = ga_links[1:]
-                print("Linked listener GAs found:", ga_links[0], self.ga_listener_keys[ga_links[0]])
+                self.logger.debug(f"Linked listener GAs found: {ga_links[0]}: {self.ga_listener_keys[ga_links[0]]}")
+
+
+    def _get_ga_list(self, ga):
+            ga_list = [ga]
+            if ga in self.ga_listener_keys:
+                ga_list = [ga] + self.ga_listener_keys[ga]
+            return ga_list
 
 
     def _get_lights_ga(self, group_addresses):
@@ -292,26 +299,24 @@ class KNXHAConverter:
             lights_group_range = self._find_group_range_by_name(self.LIGHTS_GROUPNAME)
 
             if ga in lights_group_range:
+                ga_list = self._get_ga_list(ga)
                 if _check_dpt(values, 1, 1):
-                    ga_list = [ga]
-                    if ga in self.ga_listener_keys:
-                        ga_list = [ga] + self.ga_listener_keys[ga]
                     lights.setdefault(base_name, Light(name=base_name)).address = ga_list
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 1, 11):
-                    lights.setdefault(base_name, Light(name=base_name)).state_address = ga
+                    lights.setdefault(base_name, Light(name=base_name)).state_address = ga_list
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 5, 1):
                     if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(values):
-                        lights.setdefault(base_name, Light(name=base_name)).brightness_state_address = ga
+                        lights.setdefault(base_name, Light(name=base_name)).brightness_state_address = ga_list
                     else:
-                        lights.setdefault(base_name, Light(name=base_name)).brightness_address = ga
+                        lights.setdefault(base_name, Light(name=base_name)).brightness_address = ga_list
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 7, 600):
                     if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(values):
-                        lights.setdefault(base_name, Light(name=base_name)).color_temperature_state_address = ga
+                        lights.setdefault(base_name, Light(name=base_name)).color_temperature_state_address = ga_list
                     else:
-                        lights.setdefault(base_name, Light(name=base_name)).color_temperature_address = ga
+                        lights.setdefault(base_name, Light(name=base_name)).color_temperature_address = ga_list
                     self.processed_addresses.add(ga)
 
         return list(lights.values())
@@ -360,20 +365,22 @@ class KNXHAConverter:
         covers = {}
         # First, find group addresses with DPT 1.008
         for ga, values in group_addresses.items():
+            ga_list = self._get_ga_list(ga)
             base_name = values['name'].split(' (')[0]
             if _check_dpt(values, 1, 8):
-                covers[base_name] = Cover(name=base_name, move_long_address=ga)
+                covers[base_name] = Cover(name=base_name, move_long_address=ga_list)
                 self.processed_addresses.add(ga)
 
         # Next, find group addresses with DPT 1.007 or 5.001 with the same base name
         for ga, values in group_addresses.items():
             base_name = values['name'].split(' (')[0]
             if base_name in covers:
+                ga_list = self._get_ga_list(ga)
                 if _check_dpt(values, 1, 7):
-                    covers[base_name].stop_address = ga
+                    covers[base_name].stop_address = ga_list
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 5, 1):
-                    covers[base_name].position_address = ga
+                    covers[base_name].position_address = ga_list
                     self.processed_addresses.add(ga)
 
         return list(covers.values())
