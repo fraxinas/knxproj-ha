@@ -1,6 +1,7 @@
+import sys
 import logging
-from pathlib import Path
-from xknxproject.models import KNXProject
+from ruamel.yaml import YAML
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from xknxproject import XKNXProj
 from .models import HAConfig, BinarySensor, Sensor, Light, Climate, Cover, BaseModel
 import yaml
@@ -12,10 +13,6 @@ def _dict_representer(dumper, data):
     return dumper.represent_mapping(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, data.items())
 
 OrderedDumper.add_representer(dict, _dict_representer)
-
-def _ordered_dump(data, stream=None, Dumper=OrderedDumper, **kwds):
-    """Dump YAML with OrderedDict."""
-    return yaml.dump(data, stream, OrderedDumper, **kwds)
 
 def _check_dpt(values, dpt_main, dpt_sub = None):
     if not (values and values['dpt']):
@@ -86,9 +83,14 @@ class KNXHAConverter:
         return []
 
 
-    def _find_group_range_path(self, ga_values):
-        address = ga_values["address"]
-        ga_name = ga_values["name"]
+    def _find_group_range_path(self, ga):
+        if isinstance(ga, dict):
+            name = ga["name"]
+            address = ga["address"]
+        else:
+            address = ga
+            name = self.project["group_addresses"][address]["name"]
+
         group_ranges = self.project["group_ranges"]
 
         for main_range, main_range_data in group_ranges.items():
@@ -102,9 +104,9 @@ class KNXHAConverter:
             for sub_range, sub_range_data in main_range_data.get('group_ranges', {}).items():
                 if address in sub_range_data.get('group_addresses', []):
                     sub_range_name = sub_range_data.get('name')
-                    return f"{main_range_name}/{sub_range_name}/{ga_name}"
+                    return f"{main_range_name}/{sub_range_name}/{name}"
 
-        self.logger.warning(f"No path found for group addresses {address}")
+        self.logger.warning(f"No path found for group address {address}")
         return "Unknown"  # Return a default value if not found
 
 
@@ -294,7 +296,7 @@ class KNXHAConverter:
     def _get_lights_ga(self, group_addresses):
         lights = {}
         for ga, values in group_addresses.items():
-            base_name = values['name'].replace(' Helligkeit', '')
+            base_name = values['name']
 
             lights_group_range = self._find_group_range_by_name(self.LIGHTS_GROUPNAME)
 
@@ -307,13 +309,13 @@ class KNXHAConverter:
                     lights.setdefault(base_name, Light(name=base_name)).state_address = ga_list
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 5, 1):
-                    if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(values):
+                    if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(ga):
                         lights.setdefault(base_name, Light(name=base_name)).brightness_state_address = ga_list
                     else:
                         lights.setdefault(base_name, Light(name=base_name)).brightness_address = ga_list
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 7, 600):
-                    if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(values):
+                    if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(ga):
                         lights.setdefault(base_name, Light(name=base_name)).color_temperature_state_address = ga_list
                     else:
                         lights.setdefault(base_name, Light(name=base_name)).color_temperature_address = ga_list
@@ -393,7 +395,7 @@ class KNXHAConverter:
 
         for ga, values in group_addresses.items():
             if ga not in self.processed_addresses and _check_dpt(values, 1, check_dpt_subs):
-                binary_sensors.append(BinarySensor(name=values["name"], state_address=ga))
+                binary_sensors.append(BinarySensor(name=values["name"], state_address=[ga]))
         return binary_sensors
 
 
@@ -405,7 +407,7 @@ class KNXHAConverter:
                 mapping = self._map_dpt_to_ha_sensor(values['dpt'])
                 if mapping:
                     (value_type, device_class) = mapping
-                    sensors.append(Sensor(name=values["name"], state_address=ga, type=value_type, device_class=device_class))
+                    sensors.append(Sensor(name=values["name"], state_address=[ga], type=value_type, device_class=device_class))
         return sensors
 
 
@@ -429,21 +431,41 @@ class KNXHAConverter:
         return HAConfig(light=lights, binary_sensor=binary_sensors, sensor=sensors, climate=climate, cover=covers)
 
 
-    def print(self, ha_config):
-        # Convert ha_config to a dictionary
-        ha_config_dict = ha_config.dict() if isinstance(ha_config, BaseModel) else ha_config
+    def _serialize_with_comments(self, entity):
+        serialized_entity = CommentedMap()
+        serialized_entity['name'] = entity.pop('name')
 
-        filtered_config = {'knx': {}}
+        for key, value in entity.items():
+            if value:
+                if isinstance(value, list):
+                    serialized_list = CommentedSeq()
+
+                    for addr in value:
+                        serialized_list.append(addr)
+                        # Add the comment after the address
+                        serialized_list.yaml_add_eol_comment(f" {self._find_group_range_path(addr)}", len(serialized_list) - 1, column=20)
+                        # serialized_list.yaml_add_eol_comment(f" {path}", len(serialized_list) - 1,)
+
+                    serialized_entity[key] = serialized_list
+                else:
+                    serialized_entity[key] = value
+
+        return serialized_entity
+
+
+
+    def print(self, ha_config):
+        ha_config_dict = ha_config.dict() if isinstance(ha_config, BaseModel) else ha_config
+        filtered_config = CommentedMap({'knx': {}})
+
+        yaml_obj = YAML()
+        yaml_obj.indent(mapping=2, sequence=4, offset=2)
+
         for entity_type, entities in ha_config_dict.items():
             filtered_config['knx'][entity_type] = []
             for entity in entities:
-                # Check if 'name' exists in the entity dictionary and reorder
-                if 'name' in entity:
-                    ordered_entity = {'name': entity.pop('name')}
-                    for key, value in entity.items():
-                        if value:
-                            ordered_entity[key] = value
-                    filtered_config['knx'][entity_type].append(ordered_entity)
+                serialized_entity = self._serialize_with_comments(entity)
+                filtered_config['knx'][entity_type].append(serialized_entity)
 
-        yaml_str = _ordered_dump(filtered_config, indent=2, allow_unicode=True)
-        print(yaml_str)
+        yaml_obj.dump(filtered_config, sys.stdout)
+

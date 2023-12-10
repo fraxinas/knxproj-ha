@@ -20,7 +20,7 @@ class BinarySensor(Entity):
     """BinarySensor configuration"""
     _type_id: str = "binary_sensor"
 
-    state_address: str
+    state_address: list[str] = []
 
     device_class: str | None = None
 
@@ -29,7 +29,7 @@ class Sensor(Entity):
     """Sensor configuration"""
     _type_id: str = "sensor"
 
-    state_address: str
+    state_address: list[str] = []
     type: str
 
     device_class: str | None = None
