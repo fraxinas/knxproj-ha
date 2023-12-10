@@ -52,6 +52,7 @@ class KNXHAConverter:
         self.logger = logging.getLogger("knxproj_ha")
         self.project = None
         self.group_range_cache = {}
+        self.ga_listener_keys = {}
 
 
     def _find_group_range_by_name(self, name):
@@ -275,17 +276,27 @@ class KNXHAConverter:
         return sensor_mappings.get((dpt["main"], dpt["sub"]))
 
 
+    def _find_listener_ga(self):
+        for co in self.project['communication_objects'].values():
+            ga_links = co.get("group_address_links")
+            if ga_links and len(ga_links) > 1:
+                self.ga_listener_keys[ga_links[0]] = ga_links[1:]
+                print("Linked listener GAs found:", ga_links[0], self.ga_listener_keys[ga_links[0]])
+
+
     def _get_lights_ga(self, group_addresses):
         lights = {}
         for ga, values in group_addresses.items():
             base_name = values['name'].replace(' Helligkeit', '')
 
             lights_group_range = self._find_group_range_by_name(self.LIGHTS_GROUPNAME)
-            print("checking", self._find_group_range_path(values))
 
             if ga in lights_group_range:
                 if _check_dpt(values, 1, 1):
-                    lights.setdefault(base_name, Light(name=base_name)).address = ga
+                    ga_list = [ga]
+                    if ga in self.ga_listener_keys:
+                        ga_list = [ga] + self.ga_listener_keys[ga]
+                    lights.setdefault(base_name, Light(name=base_name)).address = ga_list
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 1, 11):
                     lights.setdefault(base_name, Light(name=base_name)).state_address = ga
@@ -399,6 +410,8 @@ class KNXHAConverter:
         self.logger.debug("Start parsing KNX project file ...")
         self.project = knxproj.parse()
         self.logger.debug("... parsing finished")
+
+        self._find_listener_ga()
 
         covers = self._get_cover_ga(self.project["group_addresses"])
         lights = self._get_lights_ga(self.project["group_addresses"])

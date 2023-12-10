@@ -8,7 +8,7 @@ class Entity(BaseModel):
 class Light(Entity):
     """Light configuration"""
     _type_id: str = "light"
-    address: str = ""
+    address: list[str] = [""]
     state_address: str = ""
     brightness_address: str = ""
     brightness_state_address: str = ""
