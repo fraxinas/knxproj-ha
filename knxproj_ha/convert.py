@@ -420,6 +420,8 @@ class KNXHAConverter:
         self.project = knxproj.parse()
         self.logger.debug("... parsing finished")
 
+        self.logger.debug(self.project["group_addresses"])
+
         self._find_listener_ga()
 
         covers = self._get_cover_ga(self.project["group_addresses"])
@@ -431,7 +433,7 @@ class KNXHAConverter:
         return HAConfig(light=lights, binary_sensor=binary_sensors, sensor=sensors, climate=climate, cover=covers)
 
 
-    def _serialize_with_comments(self, entity):
+    def _serialize_groups(self, entity, comments=False):
         serialized_entity = CommentedMap()
         serialized_entity['name'] = entity.pop('name')
 
@@ -442,9 +444,8 @@ class KNXHAConverter:
 
                     for addr in value:
                         serialized_list.append(addr)
-                        # Add the comment after the address
-                        serialized_list.yaml_add_eol_comment(f" {self._find_group_range_path(addr)}", len(serialized_list) - 1, column=20)
-                        # serialized_list.yaml_add_eol_comment(f" {path}", len(serialized_list) - 1,)
+                        if comments:
+                            serialized_list.yaml_add_eol_comment(f" {self._find_group_range_path(addr)}", len(serialized_list) - 1, column=20)
 
                     serialized_entity[key] = serialized_list
                 else:
@@ -454,7 +455,7 @@ class KNXHAConverter:
 
 
 
-    def print(self, ha_config):
+    def print(self, ha_config, comments):
         ha_config_dict = ha_config.dict() if isinstance(ha_config, BaseModel) else ha_config
         filtered_config = CommentedMap({'knx': {}})
 
@@ -464,7 +465,7 @@ class KNXHAConverter:
         for entity_type, entities in ha_config_dict.items():
             filtered_config['knx'][entity_type] = []
             for entity in entities:
-                serialized_entity = self._serialize_with_comments(entity)
+                serialized_entity = self._serialize_groups(entity, comments)
                 filtered_config['knx'][entity_type].append(serialized_entity)
 
         yaml_obj.dump(filtered_config, sys.stdout)
