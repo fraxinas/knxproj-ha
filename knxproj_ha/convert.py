@@ -3,7 +3,7 @@ import logging
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from xknxproject import XKNXProj
-from .models import HAConfig, BinarySensor, Sensor, Light, Climate, Cover, BaseModel
+from .models import *
 import yaml
 
 class OrderedDumper(yaml.SafeDumper):
@@ -38,10 +38,12 @@ class KNXHAConverter:
     TARGET_TEMPERATURE_GROUPNAME = "Soll-Temperaturen"
     TARGET_TEMPERATURE_STATE_GROUPNAME = None #"Basis-Solltemperaturen"
     OPERATION_MODE_GROUPNAME = "Betriebsmodi"
-    ON_OFF_STATE_GROUPNAME = "Meldung Heizen"
+    ON_OFF_STATE_GROUPNAME = None #"Meldung Heizen"
     CURRENT_TEMPERATURE_GROUPNAME = "Ist-Temperaturen"
     LIGHTS_GROUPNAME = "Beleuchtung"
     LIGHTS_STATUS_GROUPNAME = "Status"
+
+    SENSOR_SUB_DPTS = (2, 4, 5, 6, 11, 12, 13, 14, 18)
 
     def __init__(self, project_file_path, language='de-DE'):
         self.project_file_path = project_file_path
@@ -353,7 +355,8 @@ class KNXHAConverter:
         # Process different climate-related group addresses
         process_climate_group(self.TARGET_TEMPERATURE_GROUPNAME, 9, 1, 'target_temperature_address', "Unexpected DPT for target temperature in GA: {}")
         process_climate_group(self.OPERATION_MODE_GROUPNAME, 20, 102, 'operation_mode_address', "Unexpected DPT for operation mode in GA: {}")
-        process_climate_group(self.ON_OFF_STATE_GROUPNAME, 1, 2, 'on_off_state_address', "Unexpected DPT for on/off state in GA: {}")
+        if self.ON_OFF_STATE_GROUPNAME:
+            process_climate_group(self.ON_OFF_STATE_GROUPNAME, 1, 2, 'on_off_state_address', "Unexpected DPT for on/off state in GA: {}")
         process_climate_group(self.CURRENT_TEMPERATURE_GROUPNAME, 9, 1, 'temperature_address', "Unexpected DPT for current temperature in GA: {}")
         if self.TARGET_TEMPERATURE_STATE_GROUPNAME:
             process_climate_group(self.TARGET_TEMPERATURE_STATE_GROUPNAME, 9, 1, 'target_temperature_state_address', "Unexpected DPT for target temperature state in GA: {}")
@@ -413,10 +416,22 @@ class KNXHAConverter:
         return list(covers.values())
 
 
+    def _get_switches_ga(self, group_addresses):
+        switches = []
+
+        check_dpt_subs = lambda dpt_sub: dpt_sub not in self.SENSOR_SUB_DPTS
+
+        for ga, values in group_addresses.items():
+            if ga not in self.processed_addresses and _check_dpt(values, 1, check_dpt_subs):
+                switches.append(Switch(name=values["name"], state_address=[ga]))
+                self.processed_addresses.add(ga)
+        return switches
+
+
     def _get_binary_sensors_ga(self, group_addresses):
         binary_sensors = []
 
-        check_dpt_subs = lambda dpt_sub: dpt_sub in (2, 3, 4, 5, 6, 11, 12, 13, 14, 18)
+        check_dpt_subs = lambda dpt_sub: dpt_sub in self.SENSOR_SUB_DPTS
 
         for ga, values in group_addresses.items():
             if ga not in self.processed_addresses and _check_dpt(values, 1, check_dpt_subs):
@@ -454,10 +469,11 @@ class KNXHAConverter:
         covers = self._get_cover_ga(self.project["group_addresses"])
         lights = self._get_lights_ga(self.project["group_addresses"])
         climate = self._get_climate_ga(self.project["group_addresses"])
+        switches = self._get_switches_ga(self.project["group_addresses"])
         binary_sensors = self._get_binary_sensors_ga(self.project["group_addresses"])
         sensors = self._get_sensors_ga(self.project["group_addresses"])
 
-        return HAConfig(light=lights, binary_sensor=binary_sensors, sensor=sensors, climate=climate, cover=covers)
+        return HAConfig(light=lights, switch=switches, binary_sensor=binary_sensors, sensor=sensors, climate=climate, cover=covers)
 
 
     def _serialize_groups(self, entity, comments=False):
@@ -496,4 +512,5 @@ class KNXHAConverter:
                 filtered_config['knx'][entity_type].append(serialized_entity)
 
         yaml_obj.dump(filtered_config, sys.stdout)
+
 

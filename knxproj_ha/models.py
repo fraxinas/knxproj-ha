@@ -16,6 +16,13 @@ class Light(Entity):
     color_temperature_state_address: list[str] = []
 
 
+class Switch(Entity):
+    """Switch configuration"""
+    _type_id: str = "switch"
+    address: list[str] = []
+    state_address: list[str] = []
+
+
 class BinarySensor(Entity):
     """BinarySensor configuration"""
     _type_id: str = "binary_sensor"
@@ -59,6 +66,7 @@ class HAConfig(BaseModel):
     """Extracted Home Assistant configuration"""
 
     light: list[Light] = list()
+    switch: list[Switch] = list()
     binary_sensor: list[BinarySensor] = list()
     sensor: list[Sensor] = list()
     climate: list[Climate] = list()
