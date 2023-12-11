@@ -294,34 +294,43 @@ class KNXHAConverter:
 
 
     def _get_lights_ga(self, group_addresses):
-        lights = {}
+        temp_lights = {}
+        final_lights = {}
+
+        # First pass: Collect all potential Light objects
         for ga, values in group_addresses.items():
             base_name = values['name']
 
-            lights_group_range = self._find_group_range_by_name(self.LIGHTS_GROUPNAME)
-
-            if ga in lights_group_range:
+            if ga in self._find_group_range_by_name(self.LIGHTS_GROUPNAME):
                 ga_list = self._get_ga_list(ga)
+
                 if _check_dpt(values, 1, 1):
-                    lights.setdefault(base_name, Light(name=base_name)).address = ga_list
+                    temp_lights.setdefault(base_name, {}).setdefault('address', []).extend(ga_list)
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 1, 11):
-                    lights.setdefault(base_name, Light(name=base_name)).state_address = ga_list
+                    temp_lights.setdefault(base_name, {}).setdefault('state_address', []).extend(ga_list)
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 5, 1):
                     if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(ga):
-                        lights.setdefault(base_name, Light(name=base_name)).brightness_state_address = ga_list
+                        temp_lights.setdefault(base_name, {}).setdefault('brightness_state_address', []).extend(ga_list)
                     else:
-                        lights.setdefault(base_name, Light(name=base_name)).brightness_address = ga_list
+                        temp_lights.setdefault(base_name, {}).setdefault('brightness_address', []).extend(ga_list)
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 7, 600):
                     if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(ga):
-                        lights.setdefault(base_name, Light(name=base_name)).color_temperature_state_address = ga_list
+                        temp_lights.setdefault(base_name, {}).setdefault('color_temperature_state_address', []).extend(ga_list)
                     else:
-                        lights.setdefault(base_name, Light(name=base_name)).color_temperature_address = ga_list
+                        temp_lights.setdefault(base_name, {}).setdefault('color_temperature_address', []).extend(ga_list)
                     self.processed_addresses.add(ga)
 
-        return list(lights.values())
+        # Second pass: Create Light objects only if they have a main address
+        for name, attrs in temp_lights.items():
+            if 'address' in attrs:
+                final_lights[name] = Light(name=name, **attrs)
+            else:
+                self.logger.warning(f"Lights entity '{name}' with attributes {attrs} is missing a main address, not adding to config!")
+
+        return list(final_lights.values())
 
 
     def _get_climate_ga(self, all_group_addresses):
