@@ -421,6 +421,7 @@ class KNXHAConverter:
         for ga, values in group_addresses.items():
             if ga not in self.processed_addresses and _check_dpt(values, 1, check_dpt_subs):
                 binary_sensors.append(BinarySensor(name=values["name"], state_address=[ga]))
+                self.processed_addresses.add(ga)
         return binary_sensors
 
 
@@ -433,6 +434,7 @@ class KNXHAConverter:
                 if mapping:
                     (value_type, device_class) = mapping
                     sensors.append(Sensor(name=values["name"], state_address=[ga], type=value_type, device_class=device_class))
+                    self.processed_addresses.add(ga)
         return sensors
 
 
