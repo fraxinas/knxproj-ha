@@ -36,6 +36,7 @@ def _check_dpt(values, dpt_main, dpt_sub = None):
 
 class KNXHAConverter:
     TARGET_TEMPERATURE_GROUPNAME = "Soll-Temperaturen"
+    TARGET_TEMPERATURE_STATE_GROUPNAME = None #"Basis-Solltemperaturen"
     OPERATION_MODE_GROUPNAME = "Betriebsmodi"
     ON_OFF_STATE_GROUPNAME = "Meldung Heizen"
     CURRENT_TEMPERATURE_GROUPNAME = "Ist-Temperaturen"
@@ -334,22 +335,17 @@ class KNXHAConverter:
 
 
     def _get_climate_ga(self, all_group_addresses):
-        climates = {}
+        temp_climates = {}
+        final_climates = {}
 
         def process_climate_group(name, dpt_main, dpt_sub, field_name, warning_msg):
             sub_group_addresses = self._find_group_range_by_name(name)
 
             for address in sub_group_addresses:
                 values = all_group_addresses.get(address)
-                if values and values['dpt'] == {'main': dpt_main, 'sub': dpt_sub}:
+                if values and _check_dpt(values, dpt_main, dpt_sub):
                     base_name = values['name']
-                    climates.setdefault(base_name, Climate(
-                        name=base_name,
-                        temperature_address='',
-                        target_temperature_address='',
-                        operation_mode_address='',
-                        on_off_state_address='')
-                    ).__setattr__(field_name, values['address'])
+                    temp_climates.setdefault(base_name, {}).setdefault(field_name, []).append(address)
                     self.processed_addresses.add(address)
                 else:
                     self.logger.warning(warning_msg.format(values))
@@ -359,8 +355,28 @@ class KNXHAConverter:
         process_climate_group(self.OPERATION_MODE_GROUPNAME, 20, 102, 'operation_mode_address', "Unexpected DPT for operation mode in GA: {}")
         process_climate_group(self.ON_OFF_STATE_GROUPNAME, 1, 2, 'on_off_state_address', "Unexpected DPT for on/off state in GA: {}")
         process_climate_group(self.CURRENT_TEMPERATURE_GROUPNAME, 9, 1, 'temperature_address', "Unexpected DPT for current temperature in GA: {}")
+        if self.TARGET_TEMPERATURE_STATE_GROUPNAME:
+            process_climate_group(self.TARGET_TEMPERATURE_STATE_GROUPNAME, 9, 1, 'target_temperature_state_address', "Unexpected DPT for target temperature state in GA: {}")
 
-        return list(climates.values())
+        print("temp_climates", temp_climates)
+        # Second pass: Make sure Climate entities have required fields (temperature_address,  target_temperature_state_address)
+        for name, attrs in temp_climates.items():
+
+            if not 'temperature_address' in attrs:
+                self.logger.warning(f"Climate entity '{name}' with attributes {attrs} is missing a temperature_address, not adding to config!")
+                continue
+
+            if not "target_temperature_state_address" in attrs:
+                if "target_temperature_address" in attrs:
+                    self.logger.warning(f"Climate entity '{name}' with attributes {attrs} is missing a target_temperature_state_address, assuming same as target_temperature_address!")
+                    attrs['target_temperature_state_address'] = attrs['target_temperature_address']
+                else:
+                    self.logger.warning(f"Climate entity '{name}' with attributes {attrs} is missing a target_temperature_state_address (and has no target_temperature_address as fallback), not adding to config!")
+                    continue  # Skip this climate entity
+
+            final_climates[name] = Climate(name=name, **attrs)
+
+        return list(final_climates.values())
 
 
     def _remove_bracketed_substring(self, string):

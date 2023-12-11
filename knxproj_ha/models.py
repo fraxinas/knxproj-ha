@@ -38,10 +38,11 @@ class Sensor(Entity):
 class Climate(Entity):
     """Climate configuration"""
     _type_id: str = "climate"
-    temperature_address: str
-    target_temperature_address: str
-    operation_mode_address: str
-    on_off_state_address: str
+    temperature_address: list[str]
+    target_temperature_address: list[str] = []
+    target_temperature_state_address: list[str]
+    operation_mode_address: list[str] = []
+    on_off_state_address: list[str] = []
 
 class Cover(Entity):
     """Cover configuration, this is for window blinds/shutters/jalousies"""
