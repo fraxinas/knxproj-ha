@@ -325,6 +325,12 @@ class KNXHAConverter:
                     else:
                         temp_lights.setdefault(base_name, {}).setdefault('color_temperature_address', []).extend(ga_list)
                     self.processed_addresses.add(ga)
+                elif _check_dpt(values, 251, 600):
+                    if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(ga):
+                        temp_lights.setdefault(base_name, {}).setdefault('rgbw_address', []).extend(ga_list)
+                    else:
+                        temp_lights.setdefault(base_name, {}).setdefault('rgbw_state_address', []).extend(ga_list)
+                    self.processed_addresses.add(ga)
 
         # Second pass: Create Light objects only if they have a main address
         for name, attrs in temp_lights.items():

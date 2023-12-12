@@ -14,7 +14,8 @@ class Light(Entity):
     brightness_state_address: list[str] = []
     color_temperature_address: list[str] = []
     color_temperature_state_address: list[str] = []
-
+    rgbw_address: list[str] = []
+    rgbw_state_address: list[str] = []
 
 class Switch(Entity):
     """Switch configuration"""
