@@ -86,7 +86,7 @@ class KNXHAConverter:
         return []
 
 
-    def _find_group_range_path(self, ga):
+    def find_group_range_path(self, ga):
         if isinstance(ga, dict):
             name = ga["name"]
             address = ga["address"]
@@ -314,19 +314,19 @@ class KNXHAConverter:
                     temp_lights.setdefault(base_name, {}).setdefault('state_address', []).extend(ga_list)
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 5, 1):
-                    if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(ga):
+                    if self.LIGHTS_STATUS_GROUPNAME in self.find_group_range_path(ga):
                         temp_lights.setdefault(base_name, {}).setdefault('brightness_state_address', []).extend(ga_list)
                     else:
                         temp_lights.setdefault(base_name, {}).setdefault('brightness_address', []).extend(ga_list)
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 7, 600):
-                    if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(ga):
+                    if self.LIGHTS_STATUS_GROUPNAME in self.find_group_range_path(ga):
                         temp_lights.setdefault(base_name, {}).setdefault('color_temperature_state_address', []).extend(ga_list)
                     else:
                         temp_lights.setdefault(base_name, {}).setdefault('color_temperature_address', []).extend(ga_list)
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 251, 600):
-                    if self.LIGHTS_STATUS_GROUPNAME in self._find_group_range_path(ga):
+                    if self.LIGHTS_STATUS_GROUPNAME in self.find_group_range_path(ga):
                         temp_lights.setdefault(base_name, {}).setdefault('rgbw_address', []).extend(ga_list)
                     else:
                         temp_lights.setdefault(base_name, {}).setdefault('rgbw_state_address', []).extend(ga_list)
@@ -494,7 +494,7 @@ class KNXHAConverter:
                     for addr in value:
                         serialized_list.append(addr)
                         if comments:
-                            serialized_list.yaml_add_eol_comment(f" {self._find_group_range_path(addr)}", len(serialized_list) - 1, column=20)
+                            serialized_list.yaml_add_eol_comment(f" {self.find_group_range_path(addr)}", len(serialized_list) - 1, column=20)
 
                     serialized_entity[key] = serialized_list
                 else:
