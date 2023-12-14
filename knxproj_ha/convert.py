@@ -436,7 +436,7 @@ class KNXHAConverter:
 
         for ga, values in group_addresses.items():
             if ga not in self.processed_addresses and _check_dpt(values, 1, check_dpt_subs):
-                switches.append(Switch(name=values["name"], state_address=[ga]))
+                switches.append(Switch(name=values["name"], address=[ga]))
                 self.processed_addresses.add(ga)
         return switches
 
@@ -464,7 +464,7 @@ class KNXHAConverter:
                     if entity_class == Sensor:
                         sensors.append(Sensor(name=values["name"], state_address=[ga], type=value_type, device_class=device_class))
                     elif entity_class == Number and value_type == "scene_number":
-                        self.numbers.append(Number(name=values["name"], state_address=[ga], type=value_type, min=0., max=64., step=1))
+                        self.numbers.append(Number(name=values["name"], address=[ga], type=value_type, min=0., max=64., step=1))
 
                     self.processed_addresses.add(ga)
         return sensors
