@@ -345,7 +345,7 @@ class KNXHAConverter:
             if 'address' in attrs:
                 final_lights[name] = Light(name=name, **attrs)
             else:
-                self.logger.warning(f"Lights entity '{name}' with attributes {attrs} is missing a main address, not adding to config!")
+                self.logger.info(f"Lights entity '{name}' with attributes {attrs} is missing a main address, not adding to config!")
 
         return list(final_lights.values())
 
@@ -375,20 +375,19 @@ class KNXHAConverter:
         if self.TARGET_TEMPERATURE_STATE_GROUPNAME:
             process_climate_group(self.TARGET_TEMPERATURE_STATE_GROUPNAME, 9, 1, 'target_temperature_state_address', "Unexpected DPT for target temperature state in GA: {}")
 
-        print("temp_climates", temp_climates)
         # Second pass: Make sure Climate entities have required fields (temperature_address,  target_temperature_state_address)
         for name, attrs in temp_climates.items():
 
             if not 'temperature_address' in attrs:
-                self.logger.warning(f"Climate entity '{name}' with attributes {attrs} is missing a temperature_address, not adding to config!")
+                self.logger.info(f"Climate entity '{name}' with attributes {attrs} is missing a temperature_address, not adding to config!")
                 continue
 
             if not "target_temperature_state_address" in attrs:
                 if "target_temperature_address" in attrs:
-                    self.logger.warning(f"Climate entity '{name}' with attributes {attrs} is missing a target_temperature_state_address, assuming same as target_temperature_address!")
+                    self.logger.info(f"Climate entity '{name}' with attributes {attrs} is missing a target_temperature_state_address, assuming same as target_temperature_address!")
                     attrs['target_temperature_state_address'] = attrs['target_temperature_address']
                 else:
-                    self.logger.warning(f"Climate entity '{name}' with attributes {attrs} is missing a target_temperature_state_address (and has no target_temperature_address as fallback), not adding to config!")
+                    self.logger.info(f"Climate entity '{name}' with attributes {attrs} is missing a target_temperature_state_address (and has no target_temperature_address as fallback), not adding to config!")
                     continue  # Skip this climate entity
 
             final_climates[name] = Climate(name=name, **attrs)
