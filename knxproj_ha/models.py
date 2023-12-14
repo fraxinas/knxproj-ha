@@ -52,6 +52,7 @@ class Climate(Entity):
     operation_mode_address: list[str] = []
     on_off_state_address: list[str] = []
 
+
 class Cover(Entity):
     """Cover configuration, this is for window blinds/shutters/jalousies"""
     _type_id: str = "cover"
@@ -63,6 +64,18 @@ class Cover(Entity):
     position_state_address: list[str] = []
 
 
+class Number(Entity):
+    """Number configuration"""
+    _type_id: str = "number"
+    address: list[str] = []
+    state_address: list[str] = []
+    type: str
+    min: float = ""
+    max: float = ""
+    step: float = ""
+    mode: str = "auto"
+
+
 class HAConfig(BaseModel):
     """Extracted Home Assistant configuration"""
 
@@ -72,3 +85,4 @@ class HAConfig(BaseModel):
     sensor: list[Sensor] = list()
     climate: list[Climate] = list()
     cover: list[Cover] = list()
+    number: list[Number] = list()

@@ -121,7 +121,7 @@ class KNXHAConverter:
             dpt_main (dict): DPT with main and sub.
 
         Returns:
-            tuple: (value_type, device_class) or None if no match is found.
+            tuple: (value_type, device_class, entity_class) or None if no match is found.
         """
 
         # Mapping of DPT main and sub to sensor types and device classes
@@ -275,10 +275,18 @@ class KNXHAConverter:
             (14, 80): ('apparent_power', 'apparent_power'),
             (16, 0): ('string', None),
             (16, 1): ('latin_1', None),
-            (17, 1): ('scene_number', None),
+            (17, 1): ('scene_number', None, Number),
         }
 
-        return sensor_mappings.get((dpt["main"], dpt["sub"]))
+        if not (dpt["main"], dpt["sub"]) in sensor_mappings:
+            return None
+
+        sensor_mapping = sensor_mappings[dpt["main"], dpt["sub"]]
+
+        if len(sensor_mapping) == 2:
+            sensor_mapping = sensor_mapping + (Sensor, )
+
+        return sensor_mapping
 
 
     def _find_listener_ga(self):
@@ -453,8 +461,12 @@ class KNXHAConverter:
             if ga not in self.processed_addresses and values['dpt']:
                 mapping = self._map_dpt_to_ha_sensor(values['dpt'])
                 if mapping:
-                    (value_type, device_class) = mapping
-                    sensors.append(Sensor(name=values["name"], state_address=[ga], type=value_type, device_class=device_class))
+                    (value_type, device_class, entity_class) = mapping
+                    if entity_class == Sensor:
+                        sensors.append(Sensor(name=values["name"], state_address=[ga], type=value_type, device_class=device_class))
+                    elif entity_class == Number and value_type == "scene_number":
+                        self.numbers.append(Number(name=values["name"], state_address=[ga], type=value_type, min=0., max=64., step=1))
+
                     self.processed_addresses.add(ga)
         return sensors
 
@@ -472,6 +484,8 @@ class KNXHAConverter:
 
         self._find_listener_ga()
 
+        self.numbers = []
+
         covers = self._get_cover_ga(self.project["group_addresses"])
         lights = self._get_lights_ga(self.project["group_addresses"])
         climate = self._get_climate_ga(self.project["group_addresses"])
@@ -479,7 +493,7 @@ class KNXHAConverter:
         binary_sensors = self._get_binary_sensors_ga(self.project["group_addresses"])
         sensors = self._get_sensors_ga(self.project["group_addresses"])
 
-        return HAConfig(light=lights, switch=switches, binary_sensor=binary_sensors, sensor=sensors, climate=climate, cover=covers)
+        return HAConfig(light=lights, switch=switches, binary_sensor=binary_sensors, sensor=sensors, climate=climate, cover=covers, number=self.numbers)
 
 
     def _serialize_groups(self, entity, comments=False):
