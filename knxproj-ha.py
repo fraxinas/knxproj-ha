@@ -29,7 +29,7 @@ def main():
                     dpt = (f'DPT: {values["dpt"]["main"]}.{values["dpt"]["sub"]}')
                 unprocessed_gas.append(f'\t{ga}: {converter.find_group_range_path(ga)} {dpt}')
 
-        logger.debug("Unprocessed Group Addresses:\n" + '\n'.join(unprocessed_gas))
+        logger.info("Unprocessed Group Addresses:\n" + '\n'.join(unprocessed_gas))
 
 
 

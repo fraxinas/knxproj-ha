@@ -50,8 +50,9 @@ class Climate(Entity):
     target_temperature_address: list[str] = []
     target_temperature_state_address: list[str]
     operation_mode_address: list[str] = []
+    command_value_state_address: list[str] = []
+    active_state_address: list[str] = []
     on_off_state_address: list[str] = []
-
 
 class Cover(Entity):
     """Cover configuration, this is for window blinds/shutters/jalousies"""

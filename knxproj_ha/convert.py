@@ -33,15 +33,10 @@ def _check_dpt(values, dpt_main, dpt_sub = None):
     # Otherwise, check if dpt_sub matches
     return values['dpt']['sub'] == dpt_sub
 
+(COMMUNICATION_DIRECTION_WRITE, COMMUNICATION_DIRECTION_READ) = range(2)
 
 class KNXHAConverter:
-    TARGET_TEMPERATURE_GROUPNAME = "Soll-Temperaturen"
-    TARGET_TEMPERATURE_STATE_GROUPNAME = None #"Basis-Solltemperaturen"
-    OPERATION_MODE_GROUPNAME = "Betriebsmodi"
-    ON_OFF_STATE_GROUPNAME = None #"Meldung Heizen"
-    CURRENT_TEMPERATURE_GROUPNAME = "Ist-Temperaturen"
     LIGHTS_GROUPNAME = "Beleuchtung"
-    LIGHTS_STATUS_GROUPNAME = "Status"
 
     SENSOR_SUB_DPTS = (2, 4, 5, 6, 11, 12, 13, 14, 18)
 
@@ -304,6 +299,23 @@ class KNXHAConverter:
             return ga_list
 
 
+    def _get_communication_direction(self, ga, co_ids):
+        if isinstance(co_ids, list) and len(co_ids):
+            cos_flags = [self.project['communication_objects'].get(co_id, {}).get('flags', {}) for co_id in co_ids]
+
+            # FIXME: this will miss status GAs, if the first CO element is writing (how to find out the "SENDING" CO?)
+            if cos_flags and not cos_flags[0]['read'] and cos_flags[0]['write']:
+                return COMMUNICATION_DIRECTION_WRITE
+            else:
+                if any(flag['read'] and not flag['write'] and flag['transmit'] for flag in cos_flags):
+                    return COMMUNICATION_DIRECTION_READ
+                else:
+                    self.logger.info(f"{ga}: unexpected flags for communication_object_ids {co_ids}: {cos_flags}")
+                    return
+
+        self.logger.info(f"{ga}: no communication_object_ids")
+
+
     def _get_lights_ga(self, group_addresses):
         temp_lights = {}
         final_lights = {}
@@ -314,30 +326,40 @@ class KNXHAConverter:
 
             if ga in self._find_group_range_by_name(self.LIGHTS_GROUPNAME):
                 ga_list = self._get_ga_list(ga)
+                co_ids = values.get('communication_object_ids')
+                cd = self._get_communication_direction(ga, co_ids)
 
                 if _check_dpt(values, 1, 1):
-                    temp_lights.setdefault(base_name, {}).setdefault('address', []).extend(ga_list)
-                    self.processed_addresses.add(ga)
-                elif _check_dpt(values, 1, 11):
-                    temp_lights.setdefault(base_name, {}).setdefault('state_address', []).extend(ga_list)
+                    if cd == COMMUNICATION_DIRECTION_WRITE:
+                        temp_lights.setdefault(base_name, {}).setdefault('address', []).extend(ga_list)
+                    elif cd == COMMUNICATION_DIRECTION_READ:
+                        temp_lights.setdefault(base_name, {}).setdefault('state_address', []).extend(ga_list)
+                    else:
+                        continue
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 5, 1):
-                    if self.LIGHTS_STATUS_GROUPNAME in self.find_group_range_path(ga):
+                    if cd == COMMUNICATION_DIRECTION_WRITE:
+                        temp_lights.setdefault(base_name, {}).setdefault('brightness_address', []).extend(ga_list)
+                    elif cd == COMMUNICATION_DIRECTION_READ:
                         temp_lights.setdefault(base_name, {}).setdefault('brightness_state_address', []).extend(ga_list)
                     else:
-                        temp_lights.setdefault(base_name, {}).setdefault('brightness_address', []).extend(ga_list)
+                        continue
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 7, 600):
-                    if self.LIGHTS_STATUS_GROUPNAME in self.find_group_range_path(ga):
+                    if cd == COMMUNICATION_DIRECTION_WRITE:
+                        temp_lights.setdefault(base_name, {}).setdefault('color_temperature_address', []).extend(ga_list)
+                    elif cd == COMMUNICATION_DIRECTION_READ:
                         temp_lights.setdefault(base_name, {}).setdefault('color_temperature_state_address', []).extend(ga_list)
                     else:
-                        temp_lights.setdefault(base_name, {}).setdefault('color_temperature_address', []).extend(ga_list)
+                        continue
                     self.processed_addresses.add(ga)
                 elif _check_dpt(values, 251, 600):
-                    if self.LIGHTS_STATUS_GROUPNAME in self.find_group_range_path(ga):
+                    if cd == COMMUNICATION_DIRECTION_WRITE:
                         temp_lights.setdefault(base_name, {}).setdefault('rgbw_address', []).extend(ga_list)
-                    else:
+                    elif cd == COMMUNICATION_DIRECTION_READ:
                         temp_lights.setdefault(base_name, {}).setdefault('rgbw_state_address', []).extend(ga_list)
+                    else:
+                        continue
                     self.processed_addresses.add(ga)
 
         # Second pass: Create Light objects only if they have a main address
@@ -351,6 +373,14 @@ class KNXHAConverter:
 
 
     def _get_climate_ga(self, all_group_addresses):
+        CURRENT_TEMPERATURE_GROUPNAME = "Ist-Temperaturen"
+        TARGET_TEMPERATURE_GROUPNAME = "Soll-Temperaturen"
+        TARGET_TEMPERATURE_STATE_GROUPNAME = None #"Basis-Solltemperaturen"
+        OPERATION_MODE_GROUPNAME = "Betriebsmodi"
+        ON_OFF_STATE_GROUPNAME = None #"Meldung Heizen"
+        ACTIVE_STATE_GROUPNAME = "Meldung Heizen"
+        COMMAND_VALUE_GROUPNAME = "Stellgrößen stetig"
+
         temp_climates = {}
         final_climates = {}
 
@@ -367,13 +397,17 @@ class KNXHAConverter:
                     self.logger.warning(warning_msg.format(values))
 
         # Process different climate-related group addresses
-        process_climate_group(self.TARGET_TEMPERATURE_GROUPNAME, 9, 1, 'target_temperature_address', "Unexpected DPT for target temperature in GA: {}")
-        process_climate_group(self.OPERATION_MODE_GROUPNAME, 20, 102, 'operation_mode_address', "Unexpected DPT for operation mode in GA: {}")
-        if self.ON_OFF_STATE_GROUPNAME:
-            process_climate_group(self.ON_OFF_STATE_GROUPNAME, 1, 2, 'on_off_state_address', "Unexpected DPT for on/off state in GA: {}")
-        process_climate_group(self.CURRENT_TEMPERATURE_GROUPNAME, 9, 1, 'temperature_address', "Unexpected DPT for current temperature in GA: {}")
-        if self.TARGET_TEMPERATURE_STATE_GROUPNAME:
-            process_climate_group(self.TARGET_TEMPERATURE_STATE_GROUPNAME, 9, 1, 'target_temperature_state_address', "Unexpected DPT for target temperature state in GA: {}")
+        process_climate_group(TARGET_TEMPERATURE_GROUPNAME, 9, 1, 'target_temperature_address', "Unexpected DPT for target temperature in GA: {}")
+        process_climate_group(OPERATION_MODE_GROUPNAME, 20, 102, 'operation_mode_address', "Unexpected DPT for operation mode in GA: {}")
+        if ACTIVE_STATE_GROUPNAME:
+            process_climate_group(ACTIVE_STATE_GROUPNAME, 1, 2, 'active_state_address', "Unexpected DPT for active state in GA: {}")
+        if COMMAND_VALUE_GROUPNAME:
+            process_climate_group(COMMAND_VALUE_GROUPNAME, 5, 1, 'command_value_state_address', "Unexpected DPT for command value state in GA: {}")
+        if ON_OFF_STATE_GROUPNAME:
+            process_climate_group(ON_OFF_STATE_GROUPNAME, 1, 2, 'on_off_state_address', "Unexpected DPT for on/off state in GA: {}")
+        process_climate_group(CURRENT_TEMPERATURE_GROUPNAME, 9, 1, 'temperature_address', "Unexpected DPT for current temperature in GA: {}")
+        if TARGET_TEMPERATURE_STATE_GROUPNAME:
+            process_climate_group(TARGET_TEMPERATURE_STATE_GROUPNAME, 9, 1, 'target_temperature_state_address', "Unexpected DPT for target temperature state in GA: {}")
 
         # Second pass: Make sure Climate entities have required fields (temperature_address,  target_temperature_state_address)
         for name, attrs in temp_climates.items():
